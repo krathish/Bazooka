@@ -1,7 +1,5 @@
 // bazooka.js
 // The application entry point. `npm run dev` runs this file with nodemon.
-// Modeled directly on the professor's bookedin.js — same imports up top,
-// same engine setup, same middleware order, same router-mounting pattern.
 //
 // What this file is responsible for:
 //   1. Configuring express-handlebars (view engine + helpers)
@@ -32,7 +30,8 @@ const gameRoutes = require('./routes/gameRoutes');
 const handlebars = expressHandlebars.create({
   helpers: {
 
-    // {{eq a b}} — strict-loose equality, mirrors the professor's helper.
+    // {{eq a b}} — strict-loose equality for use inside templates,
+    // e.g. {{#if (eq round.was_correct true)}}.
     eq: function (a, b) { return a == b; },
 
     // {{inc 0}} -> 1. Used to turn 0-based @index into 1-based "Round 1".
@@ -87,8 +86,8 @@ app.set('views', './Views');
 
 // ---------- middleware ----------
 // body-parser turns "name=Krathish&nickname=k" form bodies into req.body.{name,nickname}.
-// extended:true lets us also handle nested objects, which we don't use yet
-// but matches the professor's setup for consistency.
+// extended:true uses the `qs` library so nested objects (e.g. user[name]=...)
+// also parse correctly — a safe default even though we don't rely on it yet.
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // cookie-parser is required by express-session for signed cookies.

@@ -4,7 +4,6 @@
 //
 // We use express.Router() (not the app directly) so this file is a
 // self-contained module that bazooka.js mounts at the path of its choice.
-// That's the same pattern the professor used in routes/index.js.
 
 const express = require('express');
 const router = express.Router();
