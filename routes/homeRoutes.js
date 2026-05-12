@@ -8,7 +8,29 @@
 
 const express = require('express');
 const router = express.Router();
+const db = require('../database');
 const gameModel = require('../models/gameModel');
+
+// GET /healthz
+// Lightweight liveness + data-readiness probe used by Render's healthCheckPath
+// AND by us, from the outside, to debug "are previews populated yet?" without
+// having to ssh into the box. Returns JSON, 200 always (even if previews are
+// empty — that's a config issue, not a service-down issue).
+router.get('/healthz', async function (req, res) {
+  try {
+    const r = await db.query(
+      'SELECT COUNT(*)::int AS songs, COUNT(preview_url)::int AS playable FROM songs'
+    );
+    res.json({
+      ok: true,
+      songs: r.rows[0].songs,
+      playable: r.rows[0].playable,
+      ready: r.rows[0].playable > 0
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 // GET /
 // Show the leaderboard (top 10 games) and the "Start Game" form.

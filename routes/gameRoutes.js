@@ -53,6 +53,16 @@ router.post('/start', async function (req, res, next) {
     // Postgres (ORDER BY RANDOM()) so every game feels different.
     const songQueue = await songModel.getRandomSongIds(config.game.roundsPerGame);
 
+    // Guard: if the songs table has no rows with preview_url populated yet
+    // (e.g. fresh deploy that hasn't finished `fetch-previews`), tell the
+    // user clearly instead of letting /play crash on an undefined song id.
+    if (songQueue.length === 0) {
+      return res.status(503).send(
+        'No playable songs yet — the iTunes preview backfill has not finished. ' +
+        'Please wait a minute and try again, or check /healthz.'
+      );
+    }
+
     // Build the session object. From here on, the play/guess/finish handlers
     // read and mutate this same object across requests.
     req.session.game = {
