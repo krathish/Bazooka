@@ -7,8 +7,12 @@
   "scripts": {
     "start": "node ./bazooka.js",
     "dev": "nodemon ./bazooka.js",
+    "migrate": "node ./scripts/migrate.js",
     "fetch-previews": "node ./scripts/fetch-previews.js",
     "discover-songs": "node ./scripts/discover-songs.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "body-parser": "^2.2.2",

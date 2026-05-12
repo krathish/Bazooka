@@ -21,6 +21,7 @@ const expressSession = require('express-session');
 
 // ---------- application imports ----------
 const config = require('./config');
+const { migrate } = require('./scripts/migrate');
 const homeRoutes = require('./routes/homeRoutes');
 const gameRoutes = require('./routes/gameRoutes');
 
@@ -132,9 +133,25 @@ app.use(function (err, req, res, next) {
 
 
 // ---------- start the server ----------
-app.listen(config.port, function () {
-  console.log(
-    'Bazooka started on http://localhost:' + config.port + '\n' +
-    'press Ctrl-C to terminate.'
-  );
-});
+// In production we run the idempotent migration first so a fresh Render
+// deploy bootstraps its empty Postgres before accepting traffic. Locally
+// we skip it — `psql -f instructions.sql` is the documented dev workflow.
+async function start() {
+  if (config.isProduction) {
+    try {
+      await migrate();
+    } catch (err) {
+      console.error('[startup] migration failed:', err.message);
+      process.exit(1);
+    }
+  }
+
+  app.listen(config.port, function () {
+    console.log(
+      'Bazooka started on port ' + config.port + '\n' +
+      'press Ctrl-C to terminate.'
+    );
+  });
+}
+
+start();

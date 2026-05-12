@@ -19,8 +19,14 @@ const config = require('./config');
 
 // One Pool instance. The connection string lives in config.js so we never
 // have a database password sitting in version-control-tracked code.
+//
+// Render's managed Postgres requires SSL but uses a self-signed certificate
+// that Node's default validator rejects. In production we enable SSL with
+// rejectUnauthorized:false — the connection is still encrypted, we just
+// don't verify the cert chain (standard practice for managed PaaS DBs).
 const pool = new pg.Pool({
-  connectionString: config.postgres.connectionString
+  connectionString: config.postgres.connectionString,
+  ssl: config.isProduction ? { rejectUnauthorized: false } : false
 });
 
 // Helpful one-liner so we know in the terminal if Postgres is even reachable.

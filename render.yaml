@@ -1,0 +1,40 @@
+# render.yaml — Render Blueprint for Bazooka
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy in one click:
+#   1. Push this file to GitHub (already done — repo is public).
+#   2. Go to https://dashboard.render.com/blueprints and click
+#      "New Blueprint Instance".
+#   3. Pick the Bazooka repo. Render reads this file and provisions
+#      both the web service and the Postgres database for you.
+#
+# What this blueprint creates:
+#   - bazooka-db   : a free-tier managed Postgres instance
+#   - bazooka-web  : the Express app (Node), wired to the DB above
+#                    via the auto-injected DATABASE_URL env var.
+
+databases:
+  - name: bazooka-db
+    plan: free
+    databaseName: bazooka
+    user: bazooka
+
+services:
+  - type: web
+    name: bazooka-web
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true        # Render generates a strong random value
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bazooka-db
+          property: connectionString
