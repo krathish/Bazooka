@@ -1,0 +1,237 @@
+{{!--
+  play.handlebars
+  Renders at GET /game/play. Three things on screen:
+    1. Status bar at top: progress bar + "Round X of 10" + score
+    2. Big timer
+    3. The lyric in a card, followed by the guess input + submit
+
+  All gameplay state lives on the server. The only client JS is the
+  countdown timer (visual feedback + auto-submit on zero).
+--}}
+
+<section class="play-shell">
+
+  {{!-- ---- top status row ---- --}}
+  <div class="mb-3">
+    <div
+      class="progress mb-2"
+      role="progressbar"
+      aria-label="Round progress"
+      aria-valuenow="{{progressPct}}"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      style="height: 6px;">
+      <div class="progress-bar" style="width: {{progressPct}}%;"></div>
+    </div>
+    <div class="d-flex justify-content-between align-items-center small text-muted">
+      <span>Round <span class="num">{{roundNumber}}</span> of <span class="num">{{totalRounds}}</span></span>
+      <span>
+        Score:
+        <span id="score" class="num fw-semibold text-body" aria-live="polite">{{totalScore}}</span>
+      </span>
+    </div>
+  </div>
+
+  {{!-- ---- timer ---- --}}
+  <div
+    id="timer"
+    class="timer text-center display-4 fw-bold my-3 num"
+    aria-label="Time remaining">
+    <span id="timer-num">{{roundSeconds}}</span><span aria-hidden="true">s</span>
+  </div>
+
+  {{!-- ---- audio card ---- --}}
+  {{!--
+    The whole round hinges on this <audio> element. Attributes:
+      - controls    : show the native play/pause/volume UI as a visible
+                      fallback in case the browser blocks autoplay
+      - preload="auto" : start fetching the audio while the page loads
+      - playsinline : required so iOS Safari plays inline instead of
+                      full-screen-launching
+    The script below sets a friendly default volume and attempts autoplay.
+  --}}
+  <div class="card shadow-sm mb-3">
+    <div class="card-body p-4 text-center">
+      <p class="text-uppercase text-muted small mb-3 fw-semibold" style="letter-spacing: 0.05em;">
+        Listen and guess the song
+      </p>
+      <audio
+        id="preview"
+        src="{{previewUrl}}"
+        controls
+        preload="auto"
+        playsinline
+        aria-label="30-second song preview"
+        class="w-100">
+      </audio>
+    </div>
+  </div>
+
+  {{!-- ---- guess form ---- --}}
+  <form id="guess-form" method="POST" action="/game/guess" novalidate>
+    <label for="guess" class="form-label fw-semibold">What song is this?</label>
+    <input
+      id="guess"
+      name="guess"
+      type="text"
+      class="form-control form-control-lg"
+      autocomplete="off"
+      autocapitalize="off"
+      autocorrect="off"
+      spellcheck="false"
+      inputmode="text"
+      placeholder="Song title&hellip;"
+      required
+      autofocus>
+    <div class="form-text mb-3">Faster guesses earn more points.</div>
+    <button type="submit" class="btn btn-success btn-lg w-100">Submit Guess</button>
+  </form>
+
+</section>
+
+{{!--
+  Client-side timer.
+  ONE responsibility: count down on screen and auto-submit when time runs
+  out. The server still re-checks the elapsed time on POST /game/guess for
+  scoring, so this script is purely UX, not authoritative.
+--}}
+<script>
+  (function () {
+    // Templated value from the server. The double-brace expression below
+    // is replaced by Handlebars with a literal number before the page is
+    // sent to the browser, so the JS sees something like: var totalSeconds = 30;
+    var totalSeconds = {{roundSeconds}};
+
+    var timerEl = document.getElementById('timer');
+    var numEl = document.getElementById('timer-num');
+    var formEl = document.getElementById('guess-form');
+    var audioEl = document.getElementById('preview');
+
+    if (!timerEl || !numEl || !formEl) return;
+
+    // Audio: set a friendly default volume and try to autoplay.
+    // Most modern browsers BLOCK autoplay-with-sound until the user has
+    // interacted with the site at least once — but on /game/play the user
+    // just clicked "Submit Guess" or "Start Game", which counts. If the
+    // browser still blocks it, the visible <audio controls> UI lets the
+    // player click play manually.
+    if (audioEl) {
+      audioEl.volume = 0.7;
+      var attempt = audioEl.play();
+      if (attempt && typeof attempt.catch === 'function') {
+        attempt.catch(function () { /* autoplay blocked — user will click */ });
+      }
+    }
+
+    var remaining = totalSeconds;
+    var submitted = false;     // guard so we never submit twice
+    var intervalId = null;
+
+    function tick() {
+      remaining -= 1;
+      if (remaining < 0) remaining = 0;
+
+      // Update the visible number.
+      numEl.textContent = remaining;
+
+      // Last 5 seconds: add the "urgent" class so the CSS goes red + pulses.
+      // The CSS already respects prefers-reduced-motion, so we don't need
+      // to gate the class toggle here.
+      if (remaining <= 5) {
+        timerEl.classList.add('urgent');
+      }
+
+      // Time's up — submit the form (counts as a wrong answer / 0 pts).
+      if (remaining <= 0) {
+        clearInterval(intervalId);
+        submitForm();
+      }
+    }
+
+    function submitForm() {
+      if (submitted) return;
+      submitted = true;
+      // requestSubmit() runs HTML5 form validation + the submit event.
+      // Older browsers (Safari < 16) don't have it, so fall back to submit().
+      try { formEl.requestSubmit(); }
+      catch (e) { formEl.submit(); }
+    }
+
+    // Stop the interval if the user submits manually so we don't double-fire.
+    formEl.addEventListener('submit', function () {
+      submitted = true;
+      if (intervalId) clearInterval(intervalId);
+    });
+
+    // Reset the visible number on bfcache restore (mobile back button).
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted) {
+        remaining = totalSeconds;
+        numEl.textContent = remaining;
+        timerEl.classList.remove('urgent');
+      }
+    });
+
+    intervalId = setInterval(tick, 1000);
+  })();
+</script>
+
+{{!--
+  ---- Unicorn Studio ambient background ----
+  Fixed, full-viewport WebGL scene that sits behind the gameplay UI.
+  Scoped to /game/play only by living inside this template (not in the
+  shared layout). Skipped entirely when the user has prefers-reduced-motion
+  set, so we never spin up the WebGL context on those devices.
+
+  Scene project id and runtime version come from unicorn.studio's own
+  embed guide (v2.1.12, matching the version field in the scene export).
+--}}
+<div
+  class="us-bg"
+  data-us-project="ZMZwNgENYZkLEZ4QQUUe"
+  data-us-scale="1"
+  data-us-dpi="1.5"
+  data-us-fixed="true"
+  data-us-production="true"
+  aria-hidden="true"></div>
+
+<style>
+  /* Pin the canvas behind everything; never intercept clicks. */
+  .us-bg {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    z-index: -1;
+    pointer-events: none;
+  }
+  /* Let the bg show through the page chrome. The audio + guess cards
+     keep their own white surface, so legibility stays intact. */
+  body, main { background: transparent !important; }
+  /* Master kill switch — keep parity with the prefers-reduced-motion
+     rule already in main.handlebars. */
+  @media (prefers-reduced-motion: reduce) { .us-bg { display: none; } }
+</style>
+
+<script>
+  (function () {
+    if (window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+    function start() {
+      if (window.UnicornStudio && typeof window.UnicornStudio.init === 'function') {
+        window.UnicornStudio.init();
+      }
+    }
+    if (window.UnicornStudio && window.UnicornStudio.init) {
+      start();
+      return;
+    }
+    window.UnicornStudio = { isInitialized: false };
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.1.12/dist/unicornStudio.umd.js';
+    s.onload = start;
+    (document.head || document.body).appendChild(s);
+  })();
+</script>

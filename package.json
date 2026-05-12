@@ -1,0 +1,24 @@
+{
+  "name": "bazooka",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bazooka — a 10-round song-guessing game built with Express 5, express-handlebars, and PostgreSQL.",
+  "main": "bazooka.js",
+  "scripts": {
+    "start": "node ./bazooka.js",
+    "dev": "nodemon ./bazooka.js",
+    "fetch-previews": "node ./scripts/fetch-previews.js",
+    "discover-songs": "node ./scripts/discover-songs.js"
+  },
+  "dependencies": {
+    "body-parser": "^2.2.2",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "express-handlebars": "^8.0.6",
+    "express-session": "^1.19.0",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

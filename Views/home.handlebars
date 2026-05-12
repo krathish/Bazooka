@@ -1,0 +1,95 @@
+{{!--
+  home.handlebars
+  Renders at GET /. Two pieces of content:
+    1. The "Start Game" form (the primary action — Hick's law: one input, one button)
+    2. The Top 10 leaderboard (Miller's-Law-friendly chunk size)
+
+  We put the form ABOVE the leaderboard so the primary action is the first
+  thing on the page. Returning players still see their rank below.
+--}}
+
+<section class="mx-auto" style="max-width: 640px;">
+
+  {{!-- Hero / intro --}}
+  {{!-- The wordmark uses Hagrid Text Trial (italic 700) with a thick black
+       stroke around white-filled letterforms. Markup is intentionally simple
+       so screen readers still announce a single H1; the visual treatment
+       lives entirely in .brand-bazooka / .brand-pill in the layout. --}}
+  <div class="brand-hero mb-4">
+    <h1 class="brand-bazooka mb-0">Bazooka</h1>
+    <div>
+      <span class="brand-pill">Guess the song</span>
+    </div>
+  </div>
+
+  {{!-- Primary action card: nickname + start --}}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+      <form method="POST" action="/game/start" novalidate>
+        <div class="mb-3">
+          <label for="nickname" class="form-label fw-semibold">Your Nickname</label>
+          <input
+            id="nickname"
+            name="nickname"
+            type="text"
+            class="form-control form-control-lg"
+            autocomplete="nickname"
+            maxlength="30"
+            placeholder="e.g. Krathish"
+            required
+            autofocus>
+          <div class="form-text">Up to 30 characters. Shows up on the leaderboard.</div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg w-100">
+          Start Game
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {{!-- Leaderboard card --}}
+  <div class="card shadow-sm">
+    <div class="card-header bg-white">
+      <h2 class="h5 mb-0">Top Scores</h2>
+    </div>
+    <div class="card-body p-0">
+
+      {{#if topScores.length}}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th scope="col" style="width: 4rem;">#</th>
+                <th scope="col">Player</th>
+                <th scope="col" class="text-end">Score</th>
+                <th scope="col" class="text-end d-none d-sm-table-cell">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each topScores}}
+                {{!-- @index is 0-based; we use the inc helper so the user sees 1, 2, 3... --}}
+                <tr class="{{#if @first}}leader-1{{/if}}">
+                  <td class="num fw-semibold">
+                    {{#if @first}}🏆 {{/if}}{{inc @index}}
+                  </td>
+                  <td class="fw-semibold">{{this.nickname}}</td>
+                  <td class="num text-end">{{this.final_score}}</td>
+                  <td class="num text-end text-muted small d-none d-sm-table-cell">
+                    {{formatDate this.played_at}}
+                  </td>
+                </tr>
+              {{/each}}
+            </tbody>
+          </table>
+        </div>
+      {{else}}
+        {{!-- Empty state — friendly nudge instead of an empty table --}}
+        <p class="text-muted text-center py-4 mb-0">
+          No games played yet — be the first.
+        </p>
+      {{/if}}
+
+    </div>
+  </div>
+
+</section>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  {{!--
+    viewport-fit=cover lets the page draw under iOS notches/home-bar so we
+    can reclaim that space with env(safe-area-inset-*) padding below.
+  --}}
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d6efd">
+  <meta name="description" content="Bazooka — guess the song from the lyric. 10 rounds, 30 seconds each.">
+  <title>Bazooka — Guess That Song</title>
+
+  {{!-- preconnect tells the browser to open a TCP+TLS connection to the
+        Bootstrap CDN immediately, before it has even parsed the <link>
+        below. Saves ~100-200ms on first paint. --}}
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.cdnfonts.com" crossorigin>
+
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+  {{!-- Hagrid Trial — used by the Bazooka wordmark / logo treatment.
+        Trial weights only (Hagrid Text Trial Italic 700 is the one we want).
+        Free for personal/non-commercial use; for production a Zetafonts
+        license would be required. --}}
+  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/hagrid-trial">
+
+  {{!--
+    All the UI/UX polish that Bootstrap can't do for us, in ONE inline
+    <style> block. Spec said no separate CSS file or build step, so this
+    is exactly that — readable, no preprocessor, no minification.
+  --}}
+  <style>
+    /* --- foundations --- */
+    :root { color-scheme: light; }
+    html { scroll-behavior: smooth; }
+    body {
+      /* Enable kerning + ligatures + contextual alternates by default.
+         Tiny visual upgrade for free. */
+      font-feature-settings: "kern", "liga", "calt";
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    main { flex: 1 0 auto; }
+
+    /* --- typography --- */
+    h1, h2, .balance { text-wrap: balance; }    /* even line lengths in headings */
+    .lyric { text-wrap: pretty; }                /* avoid orphan words on wrapped lyrics */
+    .num { font-variant-numeric: tabular-nums; } /* digits don't wobble as numbers change */
+
+    /* --- buttons feel solid --- */
+    .btn {
+      touch-action: manipulation;             /* kill iOS 300ms double-tap zoom delay */
+      -webkit-tap-highlight-color: transparent;
+      transition:
+        transform 120ms cubic-bezier(0.215, 0.61, 0.355, 1),
+        background-color 120ms ease,
+        box-shadow 120ms ease;
+    }
+    .btn:active { transform: scale(0.97); }   /* small squish on press */
+
+    /* --- focus ring (accessibility) --- */
+    :focus-visible {
+      outline: 2px solid #0d6efd;
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    /* --- entrance animation for screen changes --- */
+    .fade-in {
+      animation: fadeInUp 200ms cubic-bezier(0.215, 0.61, 0.355, 1) both;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    /* --- score "bump" when it changes (used on finish + score updates) --- */
+    .score-bump {
+      animation: scoreBump 360ms cubic-bezier(0.215, 0.61, 0.355, 1);
+    }
+    @keyframes scoreBump {
+      0%   { transform: scale(0.94); }
+      55%  { transform: scale(1.08); }
+      100% { transform: scale(1); }
+    }
+
+    /* --- timer urgency (last 5 seconds) --- */
+    .timer.urgent { color: #dc3545; }
+    .timer.urgent #timer-num {
+      animation: pulse 600ms ease-in-out infinite;
+      display: inline-block;     /* needed so transform actually animates */
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.06); }
+    }
+
+    /* --- play screen layout (mobile-first, comfortable max width) --- */
+    .play-shell {
+      max-width: 480px;
+      margin-inline: auto;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* --- leaderboard #1 highlight (Von Restorff) --- */
+    .leader-1 { background: rgba(255, 193, 7, 0.12); }
+
+    /* --- Bazooka wordmark / logo treatment ---
+       Chunky italic display face (Hagrid Text Trial 700i) with a thick
+       black stroke around white-filled letters. The crucial bit is
+       `paint-order: stroke fill` — without it, the stroke would be
+       centered on the glyph path and eat half the letterform; with it,
+       the stroke is painted *under* the fill so the letters stay full
+       width. */
+    .brand-hero {
+      background: var(--bs-primary);
+      color: #fff;
+      border-radius: 1.25rem;
+      padding: clamp(2.5rem, 8vw, 5rem) 1rem;
+      text-align: center;
+      overflow: hidden;
+    }
+    .brand-bazooka {
+      font-family: 'Hagrid Text Trial', 'Hagrid Trial', system-ui, sans-serif;
+      font-style: italic;
+      font-weight: 700;
+      font-size: clamp(3.5rem, 13vw, 7.5rem);
+      line-height: 1;
+      letter-spacing: -0.015em;
+      color: #fff;
+      -webkit-text-stroke: 0.09em #000;
+      paint-order: stroke fill;
+      margin: 0;
+      /* Tilted slightly more than the italic angle alone for that extra
+         "wordmark" energy. Pulled back to 0 for reduced-motion users via
+         the master kill switch below. */
+      display: inline-block;
+    }
+    .brand-pill {
+      display: inline-block;
+      margin-top: clamp(0.75rem, 2vw, 1.25rem);
+      background: #fff;
+      color: #111;
+      border-radius: 999px;
+      padding: 0.5rem 1.25rem;
+      font-weight: 600;
+      font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+    }
+
+    /* --- skip link, visible only on focus --- */
+    .skip-link {
+      position: absolute;
+      left: -999px;
+      top: 0;
+    }
+    .skip-link:focus {
+      left: 0.5rem;
+      top: 0.5rem;
+      background: #fff;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      z-index: 1080;
+    }
+
+    /* --- master kill switch for users who set "reduce motion" in their OS --- */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+
+  {{!-- Skip link: lets keyboard users jump past the navbar to <main> --}}
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  {{!-- Header / navbar — stripped down because v1 only has one page worth navigating to --}}
+  <header>
+    <nav class="navbar navbar-expand-md navbar-dark bg-primary" aria-label="Primary">
+      <div class="container">
+        <a class="navbar-brand fw-bold" href="/">Bazooka</a>
+        <span class="navbar-text small text-white-50 d-none d-md-inline">
+          Guess the song. Beat the clock.
+        </span>
+      </div>
+    </nav>
+  </header>
+
+  {{!--
+    The {{{body}}} placeholder is where the per-page template (home, play,
+    finish) gets injected. Triple braces means "do not HTML-escape this" —
+    needed because the inner template IS HTML.
+  --}}
+  <main id="main" class="container py-4 fade-in">
+    {{{body}}}
+  </main>
+
+  <footer class="container py-3 text-muted small text-center border-top mt-4">
+    Bazooka — a Pratt INFO 638 class project.
+  </footer>
+
+  {{!-- Bootstrap JS for the navbar collapse on mobile. defer = don't block render. --}}
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    defer></script>
+</body>
+</html>
