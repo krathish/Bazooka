@@ -19,6 +19,7 @@
 // is fully self-bootstrapping.
 
 const db = require('../database');
+const { fetchMissingPreviews } = require('./fetch-previews');
 
 const ARTISTS = [
   'Adele', 'Bruno Mars', 'Doja Cat', 'Dua Lipa', 'Ed Sheeran', 'Eminem',
@@ -133,6 +134,29 @@ async function migrate() {
   console.log(
     `[migrate] schema ready — ${a.rows[0].c} artists, ${s.rows[0].c} songs`
   );
+
+  // Backfill iTunes preview URLs for any songs that are missing one.
+  // /game/play filters WHERE preview_url IS NOT NULL — without this step
+  // a fresh Render deploy has 30 songs but zero playable rounds, and
+  // POST /game/start sends an empty queue into /play (the very 500 we
+  // just hit in production: "Song missing for round 0 (id undefined)").
+  //
+  // The function is idempotent (only touches NULL rows), so on every boot
+  // after the first one this is a single SELECT that returns zero rows.
+  try {
+    const summary = await fetchMissingPreviews({ log: function (m) { console.log('[migrate] ' + m); } });
+    if (summary.total > 0) {
+      console.log(
+        '[migrate] previews — ' + summary.ok + ' ok, ' +
+        summary.missing + ' missing, ' +
+        summary.errored + ' errored'
+      );
+    }
+  } catch (err) {
+    // Don't kill the boot if iTunes is having a bad day — we'll try again
+    // on the next deploy / restart. Existing rows with previews still play.
+    console.error('[migrate] preview backfill failed (non-fatal):', err.message);
+  }
 }
 
 module.exports = { migrate };

@@ -44,21 +44,21 @@ async function fetchPreviewUrl(title, artist) {
   return json.results[0].previewUrl || null;
 }
 
-async function main() {
-  // SELECT every song that doesn't already have a preview_url.
-  // Doing it this way means re-running the script is safe and cheap —
-  // it skips songs we've already populated.
+// Core routine — exported so the migration step (which runs at app boot
+// on Render) can also call it. Returns a small {ok, missing, errored}
+// summary so callers can log/decide based on the outcome.
+async function fetchMissingPreviews(opts) {
+  const log = (opts && opts.log) || function () {};
+
   const { rows } = await db.query(
     'SELECT s.song_id, s.title, a.name AS artist FROM songs s JOIN artists a ON a.artist_id = s.artist_id WHERE s.preview_url IS NULL ORDER BY s.song_id'
   );
 
   if (rows.length === 0) {
-    console.log('All songs already have preview URLs. Nothing to do.');
-    await db.pool.end();
-    return;
+    return { ok: 0, missing: 0, errored: 0, total: 0 };
   }
 
-  console.log('Fetching iTunes previews for ' + rows.length + ' song(s)...');
+  log('Fetching iTunes previews for ' + rows.length + ' song(s)...');
 
   let okCount = 0;
   let missingCount = 0;
@@ -73,14 +73,14 @@ async function main() {
           'UPDATE songs SET preview_url = $1 WHERE song_id = $2',
           [previewUrl, row.song_id]
         );
-        console.log('  [ok]      ' + row.title + ' — ' + row.artist);
+        log('  [ok]      ' + row.title + ' — ' + row.artist);
         okCount += 1;
       } else {
-        console.log('  [missing] ' + row.title + ' — ' + row.artist + '  (no iTunes match)');
+        log('  [missing] ' + row.title + ' — ' + row.artist + '  (no iTunes match)');
         missingCount += 1;
       }
     } catch (err) {
-      console.log('  [error]   ' + row.title + ' — ' + row.artist + '  ' + err.message);
+      log('  [error]   ' + row.title + ' — ' + row.artist + '  ' + err.message);
       errorCount += 1;
     }
 
@@ -88,14 +88,30 @@ async function main() {
     await sleep(250);
   }
 
-  console.log('\nDone. ' + okCount + ' ok, ' + missingCount + ' missing, ' + errorCount + ' errored.');
-
-  // Important: close the pool or the script hangs forever (Node won't exit
-  // while there are open DB connections sitting in the pool).
-  await db.pool.end();
+  return { ok: okCount, missing: missingCount, errored: errorCount, total: rows.length };
 }
 
-main().catch(function (err) {
-  console.error('fetch-previews failed:', err);
-  process.exit(1);
-});
+module.exports = { fetchMissingPreviews };
+
+// CLI entry point: `npm run fetch-previews`.
+if (require.main === module) {
+  fetchMissingPreviews({ log: console.log })
+    .then(function (summary) {
+      if (summary.total === 0) {
+        console.log('All songs already have preview URLs. Nothing to do.');
+      } else {
+        console.log(
+          '\nDone. ' + summary.ok + ' ok, ' +
+          summary.missing + ' missing, ' +
+          summary.errored + ' errored.'
+        );
+      }
+      // Important: close the pool or the script hangs forever (Node won't exit
+      // while there are open DB connections sitting in the pool).
+      return db.pool.end();
+    })
+    .catch(function (err) {
+      console.error('fetch-previews failed:', err);
+      process.exit(1);
+    });
+}
