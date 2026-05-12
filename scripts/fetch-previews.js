@@ -1,28 +1,12 @@
-// scripts/fetch-previews.js
-// One-time data ingestion: walks every song in the DB that doesn't yet
-// have a preview_url, asks Apple's iTunes Search API for a 30-second
-// preview link, and UPDATEs the row.
-//
-// Run with:   npm run fetch-previews
-//
-// Why this lives in /scripts and not in a route:
-//   The app should never depend on a live API call during gameplay.
-//   We do this once, the result is cached in the DB, and from then on
-//   the play page reads `preview_url` straight from Postgres.
-//
-// iTunes Search is free, no API key, no auth, very generous rate limits.
-// Docs: https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/
+// scripts/fetch-previews.js — backfill iTunes preview URLs for songs missing one.
+// Run with: npm run fetch-previews
 
 const db = require('../database');
 
-// One-second pause helper. We use it between iTunes calls so we never
-// hammer Apple's servers (and so they never temporarily throttle us).
 function sleep(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
 }
 
-// Build the iTunes search URL. encodeURIComponent escapes spaces, &, etc.
-// `entity=song&limit=1` says "only return the top matching SONG result".
 function buildSearchUrl(title, artist) {
   const term = encodeURIComponent(title + ' ' + artist);
   return 'https://itunes.apple.com/search?term=' + term + '&entity=song&limit=1';
@@ -30,23 +14,17 @@ function buildSearchUrl(title, artist) {
 
 async function fetchPreviewUrl(title, artist) {
   const url = buildSearchUrl(title, artist);
-  // Node 18+ has fetch built in, no extra dependency needed.
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error('iTunes returned HTTP ' + response.status);
   }
   const json = await response.json();
 
-  // The shape we care about:
-  //   { resultCount: 1, results: [ { previewUrl: "https://...", ... } ] }
-  // resultCount can be 0 if the song wasn't matched (rare for mainstream pop).
   if (!json.results || json.results.length === 0) return null;
   return json.results[0].previewUrl || null;
 }
 
-// Core routine — exported so the migration step (which runs at app boot
-// on Render) can also call it. Returns a small {ok, missing, errored}
-// summary so callers can log/decide based on the outcome.
+// Idempotent: only touches rows where preview_url IS NULL.
 async function fetchMissingPreviews(opts) {
   const log = (opts && opts.log) || function () {};
 
@@ -84,7 +62,7 @@ async function fetchMissingPreviews(opts) {
       errorCount += 1;
     }
 
-    // Be polite to Apple's free API.
+    // Be polite to the free API.
     await sleep(250);
   }
 
@@ -93,7 +71,7 @@ async function fetchMissingPreviews(opts) {
 
 module.exports = { fetchMissingPreviews };
 
-// CLI entry point: `npm run fetch-previews`.
+// CLI entry point.
 if (require.main === module) {
   fetchMissingPreviews({ log: console.log })
     .then(function (summary) {
@@ -106,8 +84,7 @@ if (require.main === module) {
           summary.errored + ' errored.'
         );
       }
-      // Important: close the pool or the script hangs forever (Node won't exit
-      // while there are open DB connections sitting in the pool).
+      // Close the pool or Node won't exit.
       return db.pool.end();
     })
     .catch(function (err) {

@@ -1,16 +1,6 @@
-{{!--
-  finish.handlebars
-  Renders at GET /game/finish, AFTER the transaction has committed.
-
-  Peak-end design (Kahneman): the player's last impression is dominated by
-  the BIG score and the round-by-round review showing what they got right.
-  Two action buttons at the bottom — Play Again (primary) + Back to
-  Leaderboard (secondary).
---}}
-
 <section class="mx-auto" style="max-width: 720px;">
 
-  {{!-- ---- hero card with the big score ---- --}}
+  {{!-- score hero --}}
   <div class="card shadow-sm mb-4">
     <div class="card-body p-4 text-center">
       <h1 class="display-5 fw-bold mb-1">Game Over</h1>
@@ -25,7 +15,7 @@
     </div>
   </div>
 
-  {{!-- ---- per-round review table ---- --}}
+  {{!-- per-round review --}}
   <div class="card shadow-sm mb-4">
     <div class="card-header bg-white">
       <h2 class="h5 mb-0">Round Breakdown</h2>
@@ -67,19 +57,11 @@
     </div>
   </div>
 
-  {{!-- ---- actions ---- --}}
+  {{!-- actions --}}
   <div class="d-flex flex-column flex-sm-row gap-2">
-
-    {{!--
-      "Play Again" is a real <button type="submit"> inside a form so it can
-      be a POST (mutates session state). POST + redirect avoids the back
-      button replaying it.
-    --}}
     <form method="POST" action="/game/restart" class="flex-grow-1">
       <button type="submit" class="btn btn-primary btn-lg w-100">Play Again</button>
     </form>
-
-    {{!-- Back to Leaderboard is just navigation, so a real <a> — Cmd-click and middle-click work. --}}
     <a href="/" class="btn btn-outline-secondary btn-lg flex-grow-1">Back to Leaderboard</a>
   </div>
 
